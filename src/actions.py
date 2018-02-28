@@ -12,7 +12,12 @@ from gtts import gTTS
 import requests
 import os
 import os.path
-import RPi.GPIO as GPIO
+#test if we are running in raspberrypi
+try:
+    import RPi.GPIO as GPIO
+except Exception as e:
+    if str(e) == 'This module can only be run on a Raspberry Pi!':
+        GPIO=None
 import time
 import re
 import subprocess
@@ -22,6 +27,7 @@ import json
 import urllib.request
 import pafy
 import pychromecast
+from pygame import mixer
 
 
 
@@ -50,12 +56,27 @@ videodirectory="/home/osmc/Movies/"
 windowcmd=["Home","Settings","Weather","Videos","Music","Player"]
 window=["home","settings","weather","videos","music","playercontrols"]
 
+if GPIO != None:
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
+    #Number of entities in 'var' and 'PINS' should be the same
+    var = ('kitchen lights', 'bathroom lights', 'bedroom lights')#Add whatever names you want. This is case is insensitive
+    gpio = (12,13,24)#GPIOS for 'var'. Add other GPIOs that you want
+    for pin in gpio:
+        GPIO.setup(pin, GPIO.OUT)
+        GPIO.output(pin, 0)
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-#Number of entities in 'var' and 'PINS' should be the same
-var = ('kitchen lights', 'bathroom lights', 'bedroom lights')#Add whatever names you want. This is case is insensitive
-gpio = (12,13,24)#GPIOS for 'var'. Add other GPIOs that you want
+    #Servo pin declaration
+    GPIO.setup(27, GPIO.OUT)
+    pwm=GPIO.PWM(27, 50)
+    pwm.start(0)
+
+    #Stopbutton
+    GPIO.setup(23, GPIO.IN, pull_up_down = GPIO.PUD_UP)
+    #Led Indicator
+    GPIO.setup(25, GPIO.OUT)
+    led=GPIO.PWM(25,1)
+    led.start(0)
 
 #Number of station names and station links should be the same
 stnname=('Radio 1', 'Radio 2', 'Radio 3', 'Radio 5')#Add more stations if you want
@@ -68,22 +89,7 @@ ip='xxxxxxxxxxxx'
 devname=('Device 1', 'Device 2', 'Device 3')
 devid=('/Device1', '/Device2', '/Device3')
 
-for pin in gpio:
-    GPIO.setup(pin, GPIO.OUT)
-    GPIO.output(pin, 0)
 
-#Servo pin declaration
-GPIO.setup(27, GPIO.OUT)
-pwm=GPIO.PWM(27, 50)
-pwm.start(0)
-
-#Stopbutton
-GPIO.setup(23, GPIO.IN, pull_up_down = GPIO.PUD_UP)
-
-#Led Indicator
-GPIO.setup(25, GPIO.OUT)
-led=GPIO.PWM(25,1)
-led.start(0)
 
 playshell = None
 
@@ -126,8 +132,8 @@ language='en'
 
 #Function to manage mpv start volume
 def mpvvolmgr():
-    if os.path.isfile("/home/pi/.mediavolume.json"):
-        with open('/home/pi/.mediavolume.json', 'r') as vol:
+    if os.path.isfile(os.path.expanduser("~/.mediavolume.json")):
+        with open(os.path.expanduser('~/.mediavolume.json'), 'r') as vol:
             oldvollevel = json.load(vol)
         print(oldvollevel)
         startvol=oldvollevel
@@ -681,7 +687,7 @@ def kodiactions(phrase):
     elif 'set'.lower() in str(phrase).lower() and 'volume'.lower() in str(phrase).lower():
         for s in re.findall(r'\b\d+\b', phrase):
             kodi.Application.SetVolume({"volume": int(s)})
-            with open('/home/pi/.volume.json', 'w') as f:
+            with open(os.path.expanduser('~/.volume.json'), 'w') as f:
                    json.dump(int(s), f)
     elif 'toggle mute'.lower() in str(phrase).lower():
         status=mutevolstatus()
@@ -778,13 +784,13 @@ def fetchautoplaylist(url,numvideos):
 
 def loadsonglist():
     song_ids=[]
-    if os.path.isfile("/home/pi/songs.json"):
-        with open('/home/pi/songs.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/songs.json")):
+        with open(os.path.expanduser('~/songs.json'),'r') as input_file:
             songs_list= json.load(input_file)
 ##            print(songs_list)
     else:
         songs_list= api.get_all_songs()
-        with open('/home/pi/songs.json', 'w') as output_file:
+        with open(os.path.expanduser('~/songs.json'), 'w') as output_file:
             json.dump(songs_list, output_file)
     for i in range(0,len(songs_list)):
         song_ids.append(songs_list[i]['id'])
@@ -794,13 +800,13 @@ def loadsonglist():
 def loadartist(artistname):
     song_ids=[]
     artist=str(artistname)
-    if os.path.isfile("/home/pi/songs.json"):
-        with open('/home/pi/songs.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/songs.json")):
+        with open(os.path.expanduser('~/songs.json'),'r') as input_file:
             songs_list= json.load(input_file)
 ##            print(songs_list)
     else:
         songs_list= api.get_all_songs()
-        with open('/home/pi/songs.json', 'w') as output_file:
+        with open(os.path.expanduser('~/songs.json'), 'w') as output_file:
             json.dump(songs_list, output_file)
     for i in range(0,len(songs_list)):
         if artist.lower() in (songs_list[i]['albumArtist']).lower():
@@ -813,13 +819,13 @@ def loadartist(artistname):
 def loadalbum(albumname):
     song_ids=[]
     album=str(albumname)
-    if os.path.isfile("/home/pi/songs.json"):
-        with open('/home/pi/songs.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/songs.json")):
+        with open(os.path.expanduser('~/songs.json'),'r') as input_file:
             songs_list= json.load(input_file)
 ##            print(songs_list)
     else:
         songs_list= api.get_all_songs()
-        with open('/home/pi/songs.json', 'w') as output_file:
+        with open(os.path.expanduser('~/songs.json'), 'w') as output_file:
             json.dump(songs_list, output_file)
     for i in range(0,len(songs_list)):
         if album.lower() in (songs_list[i]['album']).lower():
@@ -831,12 +837,12 @@ def loadalbum(albumname):
 
 def loadplaylist(playlistnum):
     track_ids=[]
-    if os.path.isfile("/home/pi/playlist.json"):
-        with open('/home/pi/playlist.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/playlist.json")):
+        with open(os.path.expanduser('~/playlist.json'),'r') as input_file:
             playlistcontents= json.load(input_file)
     else:
         playlistcontents=api.get_all_user_playlist_contents()
-        with open('/home/pi/playlist.json', 'w') as output_file:
+        with open(os.path.expanduser('~/playlist.json'), 'w') as output_file:
             json.dump(playlistcontents, output_file)
 ##        print(playlistcontents[0]['tracks'])
 
@@ -849,29 +855,29 @@ def loadplaylist(playlistnum):
 def refreshlists():
     playlist_list=api.get_all_user_playlist_contents()
     songs_list=api.get_all_songs()
-    with open('/home/pi/songs.json', 'w') as output_file:
+    with open(os.path.expanduser('~/songs.json'), 'w') as output_file:
         json.dump(songs_list, output_file)
-    with open('/home/pi/playlist.json', 'w') as output_file:
+    with open(os.path.expanduser('~/playlist.json'), 'w') as output_file:
         json.dump(playlist_list, output_file)
     say("Music list synchronised")
 
 def play_playlist(playlistnum):
 
-    if os.path.isfile("/home/pi/.gmusicplaylistplayer.json"):
-        with open('/home/pi/.gmusicplaylistplayer.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/.gmusicplaylistplayer.json")):
+        with open(os.path.expanduser('~/.gmusicplaylistplayer.json'),'r') as input_file:
             playerinfo= json.load(input_file)
         currenttrackid=playerinfo[0]
         loopstatus=playerinfo[1]
         nexttrackid=currenttrackid+1
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.gmusicplaylistplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.gmusicplaylistplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
     else:
         currenttrackid=0
         nexttrackid=1
         loopstatus='on'
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.gmusicplaylistplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.gmusicplaylistplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
 
     tracks,numtracks=loadplaylist(playlistnum)
@@ -888,7 +894,7 @@ def play_playlist(playlistnum):
             nexttrackid=1
             loopstatus='on'
             playerinfo=[nexttrackid,loopstatus]
-            with open('/home/pi/.gmusicplaylistplayer.json', 'w') as output_file:
+            with open(os.path.expanduser('~/.gmusicplaylistplayer.json'), 'w') as output_file:
                 json.dump(playerinfo,output_file)
             streamurl=api.get_stream_url(tracks[currenttrackid])
             streamurl=("'"+streamurl+"'")
@@ -902,21 +908,21 @@ def play_playlist(playlistnum):
 
 def play_songs():
 
-    if os.path.isfile("/home/pi/.gmusicsongsplayer.json"):
-        with open('/home/pi/.gmusicsongsplayer.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/.gmusicsongsplayer.json")):
+        with open(os.path.expanduser('~/.gmusicsongsplayer.json'),'r') as input_file:
             playerinfo= json.load(input_file)
         currenttrackid=playerinfo[0]
         loopstatus=playerinfo[1]
         nexttrackid=currenttrackid+1
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.gmusicsongsplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.gmusicsongsplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
     else:
         currenttrackid=0
         nexttrackid=1
         loopstatus='on'
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.gmusicsongsplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.gmusicsongsplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
 
     tracks,numtracks=loadsonglist()
@@ -933,7 +939,7 @@ def play_songs():
             nexttrackid=1
             loopstatus='on'
             playerinfo=[nexttrackid,loopstatus]
-            with open('/home/pi/.gmusicsongsplayer.json', 'w') as output_file:
+            with open(os.path.expanduser('~/.gmusicsongsplayer.json'), 'w') as output_file:
                 json.dump(playerinfo,output_file)
             streamurl=api.get_stream_url(tracks[currenttrackid])
             streamurl=("'"+streamurl+"'")
@@ -946,21 +952,21 @@ def play_songs():
 
 
 def play_album(albumname):
-    if os.path.isfile("/home/pi/.gmusicalbumplayer.json"):
-        with open('/home/pi/.gmusicalbumplayer.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/.gmusicalbumplayer.json")):
+        with open(os.path.expanduser('~/.gmusicalbumplayer.json'),'r') as input_file:
             playerinfo= json.load(input_file)
         currenttrackid=playerinfo[0]
         loopstatus=playerinfo[1]
         nexttrackid=currenttrackid+1
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.gmusicalbumplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.gmusicalbumplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
     else:
         currenttrackid=0
         nexttrackid=1
         loopstatus='on'
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.gmusicalbumplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.gmusicalbumplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
 
     tracks,numtracks=loadalbum(albumname)
@@ -977,7 +983,7 @@ def play_album(albumname):
             nexttrackid=1
             loopstatus='on'
             playerinfo=[nexttrackid,loopstatus]
-            with open('/home/pi/.gmusicalbumplayer.json', 'w') as output_file:
+            with open(os.path.expanduser('~/.gmusicalbumplayer.json'), 'w') as output_file:
                 json.dump(playerinfo,output_file)
             streamurl=api.get_stream_url(tracks[currenttrackid])
             streamurl=("'"+streamurl+"'")
@@ -991,21 +997,21 @@ def play_album(albumname):
 
 
 def play_artist(artistname):
-    if os.path.isfile("/home/pi/.gmusicartistplayer.json"):
-        with open('/home/pi/.gmusicartistplayer.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/.gmusicartistplayer.json")):
+        with open(os.path.expanduser('~/.gmusicartistplayer.json'),'r') as input_file:
             playerinfo= json.load(input_file)
         currenttrackid=playerinfo[0]
         loopstatus=playerinfo[1]
         nexttrackid=currenttrackid+1
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.gmusicartistplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.gmusicartistplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
     else:
         currenttrackid=0
         nexttrackid=1
         loopstatus='on'
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.gmusicartistplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.gmusicartistplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
 
     tracks,numtracks=loadartist(artistname)
@@ -1022,7 +1028,7 @@ def play_artist(artistname):
             nexttrackid=1
             loopstatus='on'
             playerinfo=[nexttrackid,loopstatus]
-            with open('/home/pi/.gmusicartistplayer.json', 'w') as output_file:
+            with open(os.path.expanduser('~/.gmusicartistplayer.json'), 'w') as output_file:
                 json.dump(playerinfo,output_file)
             streamurl=api.get_stream_url(tracks[currenttrackid])
             streamurl=("'"+streamurl+"'")
@@ -1103,25 +1109,25 @@ def gmusicselect(phrase):
 #-----------------Start of Functions for YouTube Streaming---------------------
 def youtubeplayer():
 
-    if os.path.isfile("/home/pi/.youtubeplayer.json"):
-        with open('/home/pi/.youtubeplayer.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/.youtubeplayer.json")):
+        with open(os.path.expanduser('~/.youtubeplayer.json'),'r') as input_file:
             playerinfo= json.load(input_file)
         currenttrackid=playerinfo[0]
         loopstatus=playerinfo[1]
         nexttrackid=currenttrackid+1
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.youtubeplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.youtubeplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
     else:
         currenttrackid=0
         nexttrackid=1
         loopstatus='on'
         playerinfo=[nexttrackid,loopstatus]
-        with open('/home/pi/.youtubeplayer.json', 'w') as output_file:
+        with open(os.path.expanduser('~/.youtubeplayer.json'), 'w') as output_file:
             json.dump(playerinfo, output_file)
 
-    if os.path.isfile("/home/pi/youtubeurllist.json"):
-        with open('/home/pi/youtubeurllist.json','r') as input_file:
+    if os.path.isfile(os.path.expanduser("~/youtubeurllist.json")):
+        with open(os.path.expanduser('~/youtubeurllist.json'),'r') as input_file:
             tracks= json.load(input_file)
             numtracks=len(tracks)
             print(tracks)
@@ -1143,7 +1149,7 @@ def youtubeplayer():
             nexttrackid=1
             loopstatus='on'
             playerinfo=[nexttrackid,loopstatus]
-            with open('/home/pi/.youtubeplayer.json', 'w') as output_file:
+            with open(os.path.expanduser('~/.youtubeplayer.json'), 'w') as output_file:
                 json.dump(playerinfo,output_file)
             audiostream,videostream=youtube_stream_link(tracks[currenttrackid])
             streamurl=audiostream
@@ -1169,10 +1175,10 @@ def YouTube_Autoplay(phrase):
     for i in range(0,len(autourls)):
         urllist.append(autourls[i])
     say("Adding autoplay links to the playlist")
-    with open('/home/pi/youtubeurllist.json', 'w') as output_file:
+    with open(os.path.expanduser('~/youtubeurllist.json'), 'w') as output_file:
         json.dump(autourls, output_file)
-    if os.path.isfile("/home/pi/.youtubeplayer.json"):
-        os.remove('/home/pi/.youtubeplayer.json')
+    if os.path.isfile(os.path.expanduser("~/.youtubeplayer.json")):
+        os.remove(os.path.expanduser('~/.youtubeplayer.json'))
     youtubeplayer()
 
 
@@ -1187,10 +1193,10 @@ def YouTube_No_Autoplay(phrase):
     fullurl,urlid=youtube_search(track)
     urllist.append(fullurl)
     print(urllist)
-    with open('/home/pi/youtubeurllist.json', 'w') as output_file:
+    with open(os.path.expanduser('~/youtubeurllist.json'), 'w') as output_file:
         json.dump(urllist, output_file)
-    if os.path.isfile("/home/pi/.youtubeplayer.json"):
-        os.remove('/home/pi/.youtubeplayer.json')
+    if os.path.isfile(os.path.expanduser("~/.youtubeplayer.json")):
+        os.remove(os.path.expanduser('~/.youtubeplayer.json'))
     youtubeplayer()
 
 #-----------------End of Functions for YouTube Streaming---------------------
@@ -1270,3 +1276,14 @@ def Action(phrase):
                 elif 'off' in phrase:
                     GPIO.output(pinout, 0)
                     say("Turning Off " + name)
+
+
+def play_audio_file(fname):
+    """Simple function to play a wave file.
+
+    :param str fname: wave file name
+    """
+    if mixer.get_init() != None:
+        mixer.quit()
+    mixer.init()
+    mixer.Sound(fname).play()

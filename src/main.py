@@ -15,7 +15,12 @@
 # limitations under the License.
 
 from kodijson import Kodi, PLAYER_VIDEO
-import RPi.GPIO as GPIO
+#test if we are running in raspberrypi
+try:
+    import RPi.GPIO as GPIO
+except Exception as e:
+    if str(e) == 'This module can only be run on a Raspberry Pi!':
+    	GPIO=None
 import argparse
 import os.path
 import os
@@ -24,6 +29,7 @@ import subprocess
 import re
 import psutil
 import logging
+import imp
 import google.auth.transport.requests
 import google.oauth2.credentials
 from google.assistant.library import Assistant
@@ -46,13 +52,16 @@ from actions import gmusicselect
 from actions import refreshlists
 from actions import chromecast_play_video
 from actions import chromecast_control
+from actions import play_audio_file
 
+ROOT_PATH = os.path.realpath(os.path.join(__file__, '..', '..'))
+resources = {'fb':'{}/sample-audio-files/Fb.wav'.format(ROOT_PATH),'startup':'{}/sample-audio-files/Startup.wav'.format(ROOT_PATH)}
 
 logging.basicConfig(filename='/tmp/GassistPi.log', level=logging.DEBUG,
                     format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger=logging.getLogger(__name__)
 
-
+INFO_FILE = os.path.expanduser('~/gassistant-credentials.info')
 
 #Login with default kodi/kodi credentials
 #kodi = Kodi("http://localhost:8080/jsonrpc")
@@ -61,18 +70,18 @@ logger=logging.getLogger(__name__)
 # Kodi("http://IP-ADDRESS-OF-KODI:8080/jsonrpc", "username", "password")
 kodi = Kodi("http://192.168.1.15:8080/jsonrpc", "kodi", "kodi")
 
+if GPIO != None:
+	GPIO.setmode(GPIO.BCM)
+	GPIO.setwarnings(False)
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-
-#Indicator Pins
-GPIO.setup(25, GPIO.OUT)
-GPIO.setup(5, GPIO.OUT)
-GPIO.setup(6, GPIO.OUT)
-GPIO.output(5, GPIO.LOW)
-GPIO.output(6, GPIO.LOW)
-led=GPIO.PWM(25,1)
-led.start(0)
+	#Indicator Pins
+	GPIO.setup(25, GPIO.OUT)
+	GPIO.setup(5, GPIO.OUT)
+	GPIO.setup(6, GPIO.OUT)
+	GPIO.output(5, GPIO.LOW)
+	GPIO.output(6, GPIO.LOW)
+	led=GPIO.PWM(25,1)
+	led.start(0)
 
 mpvactive=False
 
@@ -132,24 +141,25 @@ def process_event(event, device_id):
         event(event.Event): The current event to process.
     """
     if event.type == EventType.ON_CONVERSATION_TURN_STARTED:
-        subprocess.Popen(["aplay", "/home/pi/GassistPi/sample-audio-files/Fb.wav"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        play_audio_file(resources['fb'])
         #Uncomment the following after starting the Kodi
         #status=mutevolstatus()
         #vollevel=status[1]
-        #with open('/home/pi/.volume.json', 'w') as f:
+        #with open(os.path.expanduser('~/.volume.json'), 'w') as f:
                #json.dump(vollevel, f)
         #kodi.Application.SetVolume({"volume": 0})
-        GPIO.output(5,GPIO.HIGH)
-        led.ChangeDutyCycle(100)
+        if GPIO != None:
+        	GPIO.output(5,GPIO.HIGH)
+        	led.ChangeDutyCycle(100)
         print()
         if ismpvplaying():
-            if os.path.isfile("/home/pi/.mediavolume.json"):
+            if os.path.isfile(os.path.expanduser("~/.mediavolume.json")):
                 mpvsetvol=os.system("echo '"+json.dumps({ "command": ["set_property", "volume","10"]})+"' | socat - /tmp/mpvsocket")
             else:
                 mpvgetvol=subprocess.Popen([("echo '"+json.dumps({ "command": ["get_property", "volume"]})+"' | socat - /tmp/mpvsocket")],shell=True, stdout=subprocess.PIPE)
                 output=mpvgetvol.communicate()[0]
                 for currntvol in re.findall(r"[-+]?\d*\.\d+|\d+", str(output)):
-                    with open('/home/pi/.mediavolume.json', 'w') as vol:
+                    with open(os.path.expanduser('~/.mediavolume.json'), 'w') as vol:
                         json.dump(currntvol, vol)
                 mpvsetvol=os.system("echo '"+json.dumps({ "command": ["set_property", "volume","10"]})+"' | socat - /tmp/mpvsocket")
 
@@ -158,28 +168,31 @@ def process_event(event, device_id):
         print(event)
 
     if (event.type == EventType.ON_RESPONDING_STARTED and event.args and not event.args['is_error_response']):
-       GPIO.output(5,GPIO.LOW)
-       GPIO.output(6,GPIO.HIGH)
-       led.ChangeDutyCycle(50)
+    	if GPIO != None:
+    		GPIO.output(5,GPIO.LOW)
+    		GPIO.output(6,GPIO.HIGH)
+    		led.ChangeDutyCycle(50)
 
     if event.type == EventType.ON_RESPONDING_FINISHED:
-       GPIO.output(6,GPIO.LOW)
-       GPIO.output(5,GPIO.HIGH)
-       led.ChangeDutyCycle(100)
+    	if GPIO != None:
+    		GPIO.output(6,GPIO.LOW)
+    		GPIO.output(5,GPIO.HIGH)
+    		led.ChangeDutyCycle(100)
 
     print(event)
 
     if (event.type == EventType.ON_CONVERSATION_TURN_FINISHED and
             event.args and not event.args['with_follow_on_turn']):
-        GPIO.output(5,GPIO.LOW)
-        led.ChangeDutyCycle(0)
+        if GPIO != None:
+        	GPIO.output(5,GPIO.LOW)
+        	led.ChangeDutyCycle(0)
         #Uncomment the following after starting the Kodi
-        #with open('/home/pi/.volume.json', 'r') as f:
+        #with open(os.path.expanduser('~/.volume.json'), 'r') as f:
                #vollevel = json.load(f)
                #kodi.Application.SetVolume({"volume": vollevel})
         if ismpvplaying():
-            if os.path.isfile("/home/pi/.mediavolume.json"):
-                with open('/home/pi/.mediavolume.json', 'r') as vol:
+            if os.path.isfile(os.path.expanduser("~/.mediavolume.json")):
+                with open(os.path.expanduser('~/.mediavolume.json'), 'r') as vol:
                     oldvollevel = json.load(vol)
                 print(oldvollevel)
                 mpvsetvol=os.system("echo '"+json.dumps({ "command": ["set_property", "volume",str(oldvollevel)]})+"' | socat - /tmp/mpvsocket")
@@ -221,29 +234,14 @@ def register_device(project_id, credentials, device_model_id, device_id):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--credentials', type=existing_file,
-                        metavar='OAUTH2_CREDENTIALS_FILE',
-                        default=os.path.join(
-                            os.path.expanduser('~/.config'),
-                            'google-oauthlib-tool',
-                            'credentials.json'
-                        ),
-                        help='Path to store and read OAuth2 credentials')
-    parser.add_argument('--device_model_id', type=str,
-                        metavar='DEVICE_MODEL_ID', required=True,
-                        help='The device model ID registered with Google.')
-    parser.add_argument('--project_id', type=str,
-                        metavar='PROJECT_ID', required=False,
-                        help='The project ID used to register device '
-                        + 'instances.')
-    args = parser.parse_args()
+    args = imp.load_source('args',INFO_FILE)
+    if not hasattr(args,'credentials'):
+    	args.credentials = os.path.join(os.path.expanduser('~/.config'),'google-oauthlib-tool','credentials.json')
     with open(args.credentials, 'r') as f:
         credentials = google.oauth2.credentials.Credentials(token=None,
                                                             **json.load(f))
     with Assistant(credentials, args.device_model_id) as assistant:
-        subprocess.Popen(["aplay", "/home/pi/GassistPi/sample-audio-files/Startup.wav"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        play_audio_file(resources['startup'])
         events = assistant.start()
         print('device_model_id:', args.device_model_id + '\n' +
               'device_id:', assistant.device_id + '\n')
@@ -264,17 +262,17 @@ def main():
             if 'stream'.lower() in str(usrcmd).lower():
                 assistant.stop_conversation()
                 os.system('pkill mpv')
-                if os.path.isfile("/home/pi/GassistPi/src/trackchange.py"):
-                    os.system('rm /home/pi/GassistPi/src/trackchange.py')
-                    os.system('echo "from actions import youtubeplayer\n\n" >> /home/pi/GassistPi/src/trackchange.py')
-                    os.system('echo "youtubeplayer()\n" >> /home/pi/GassistPi/src/trackchange.py')
+                if os.path.isfile("{}/src/trackchange.py".format(ROOT_PATH)):
+                    os.system('rm {}/src/trackchange.py'.format(ROOT_PATH))
+                    os.system('echo "from actions import youtubeplayer\n\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
+                    os.system('echo "youtubeplayer()\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
                     if 'autoplay'.lower() in str(usrcmd).lower():
                         YouTube_Autoplay(str(usrcmd).lower())
                     else:
                         YouTube_No_Autoplay(str(usrcmd).lower())
                 else:
-                    os.system('echo "from actions import youtubeplayer\n\n" >> /home/pi/GassistPi/src/trackchange.py')
-                    os.system('echo "youtubeplayer()\n" >> /home/pi/GassistPi/src/trackchange.py')
+                    os.system('echo "from actions import youtubeplayer\n\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
+                    os.system('echo "youtubeplayer()\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
                     if 'autoplay'.lower() in str(usrcmd).lower():
                         YouTube_Autoplay(str(usrcmd).lower())
                     else:
@@ -317,22 +315,22 @@ def main():
                     if 'set'.lower() in str(usrcmd).lower() or 'change'.lower() in str(usrcmd).lower():
                         if 'hundred'.lower() in str(usrcmd).lower() or 'maximum' in str(usrcmd).lower():
                             settingvollevel=100
-                            with open('/home/pi/.mediavolume.json', 'w') as vol:
+                            with open(os.path.expanduser('~/.mediavolume.json'), 'w') as vol:
                                 json.dump(settingvollevel, vol)
                             mpvsetvol=os.system("echo '"+json.dumps({ "command": ["set_property", "volume",str(settingvollevel)]})+"' | socat - /tmp/mpvsocket")
                         elif 'zero'.lower() in str(usrcmd).lower() or 'minimum' in str(usrcmd).lower():
                             settingvollevel=0
-                            with open('/home/pi/.mediavolume.json', 'w') as vol:
+                            with open(os.path.expanduser('~/.mediavolume.json'), 'w') as vol:
                                 json.dump(settingvollevel, vol)
                             mpvsetvol=os.system("echo '"+json.dumps({ "command": ["set_property", "volume",str(settingvollevel)]})+"' | socat - /tmp/mpvsocket")
                         else:
                             for settingvollevel in re.findall(r"[-+]?\d*\.\d+|\d+", str(usrcmd)):
-                                with open('/home/pi/.mediavolume.json', 'w') as vol:
+                                with open(os.path.expanduser('~/.mediavolume.json'), 'w') as vol:
                                     json.dump(settingvollevel, vol)
                             mpvsetvol=os.system("echo '"+json.dumps({ "command": ["set_property", "volume",str(settingvollevel)]})+"' | socat - /tmp/mpvsocket")
                     elif 'increase'.lower() in str(usrcmd).lower() or 'decrease'.lower() in str(usrcmd).lower() or 'reduce'.lower() in str(usrcmd).lower():
-                        if os.path.isfile("/home/pi/.mediavolume.json"):
-                            with open('/home/pi/.mediavolume.json', 'r') as vol:
+                        if os.path.isfile(os.path.expanduser("~/.mediavolume.json")):
+                            with open(os.path.expanduser('~/.mediavolume.json'), 'r') as vol:
                                 oldvollevel = json.load(vol)
                                 for oldvollevel in re.findall(r'\b\d+\b', str(oldvollevel)):
                                     oldvollevel=int(oldvollevel)
@@ -356,7 +354,7 @@ def main():
                                 settingvollevel==0
                             else:
                                 settingvollevel=newvollevel
-                            with open('/home/pi/.mediavolume.json', 'w') as vol:
+                            with open(os.path.expanduser('~/.mediavolume.json'), 'w') as vol:
                                 json.dump(settingvollevel, vol)
                             mpvsetvol=os.system("echo '"+json.dumps({ "command": ["set_property", "volume",str(settingvollevel)]})+"' | socat - /tmp/mpvsocket")
                         if 'decrease'.lower() in str(usrcmd).lower() or 'reduce'.lower() in str(usrcmd).lower():
@@ -373,7 +371,7 @@ def main():
                                 settingvollevel==0
                             else:
                                 settingvollevel=newvollevel
-                            with open('/home/pi/.mediavolume.json', 'w') as vol:
+                            with open(os.path.expanduser('~/.mediavolume.json'), 'w') as vol:
                                 json.dump(settingvollevel, vol)
                             mpvsetvol=os.system("echo '"+json.dumps({ "command": ["set_property", "volume",str(settingvollevel)]})+"' | socat - /tmp/mpvsocket")
                     else:
@@ -387,11 +385,131 @@ def main():
             if 'google music'.lower() in str(usrcmd).lower():
                 assistant.stop_conversation()
                 os.system('pkill mpv')
-                if os.path.isfile("/home/pi/GassistPi/src/trackchange.py"):
-                    os.system('rm /home/pi/GassistPi/src/trackchange.py')
-                    gmusicselect(str(usrcmd).lower())
+                if os.path.isfile("{}/src/trackchange.py".format(ROOT_PATH)):
+                    os.system('rm {}/src/trackchange.py'.format(ROOT_PATH))
+                    os.system('echo "from actions import play_playlist\nfrom actions import play_songs\nfrom actions import play_album\nfrom actions import play_artist\n\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
+                    if 'all the songs'.lower() in str(usrcmd).lower():
+                        os.system('echo "play_songs()\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
+                        say("Playing all your songs")
+                        play_songs()
+
+                    if 'playlist'.lower() in str(usrcmd).lower():
+                        if 'first'.lower() in str(usrcmd).lower() or 'one'.lower() in str(usrcmd).lower()  or '1'.lower() in str(usrcmd).lower():
+                            os.system('echo "play_playlist(0)\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
+                            say("Playing songs from your playlist")
+                            play_playlist(0)
+                        else:
+                            say("Sorry I am unable to help")
+
+                    if 'album'.lower() in str(usrcmd).lower():
+                        if os.path.isfile(os.path.expanduser("~/.gmusicalbumplayer.json")):
+                            os.system("rm {}".format(os.path.expanduser('~/.gmusicalbumplayer.json')))
+
+                        req=str(usrcmd).lower()
+                        idx=(req).find('album')
+                        album=req[idx:]
+                        album=album.replace("'}", "",1)
+                        album = album.replace('album','',1)
+                        if 'from'.lower() in req:
+                            album = album.replace('from','',1)
+                            album = album.replace('google music','',1)
+                        else:
+                            album = album.replace('google music','',1)
+
+                        album=album.strip()
+                        print(album)
+                        albumstr=('"'+album+'"')
+                        f = open('{}/src/trackchange.py'.format(ROOT_PATH), 'a+')
+                        f.write('play_album('+albumstr+')')
+                        f.close()
+                        say("Looking for songs from the album")
+                        play_album(album)
+
+                    if 'artist'.lower() in str(usrcmd).lower():
+                        if os.path.isfile(os.path.expanduser("~/.gmusicartistplayer.json")):
+                            os.system("rm {}".format(os.path.expanduser('~/.gmusicartistplayer.json')))
+
+                        req=str(usrcmd).lower()
+                        idx=(req).find('artist')
+                        artist=req[idx:]
+                        artist=artist.replace("'}", "",1)
+                        artist = artist.replace('artist','',1)
+                        if 'from'.lower() in req:
+                            artist = artist.replace('from','',1)
+                            artist = artist.replace('google music','',1)
+                        else:
+                            artist = artist.replace('google music','',1)
+
+                        artist=artist.strip()
+                        print(artist)
+                        artiststr=('"'+artist+'"')
+                        f = open('{}/src/trackchange.py'.format(ROOT_PATH), 'a+')
+                        f.write('play_artist('+artiststr+')')
+                        f.close()
+                        say("Looking for songs rendered by the artist")
+                        play_artist(artist)
                 else:
-                    gmusicselect(str(usrcmd).lower())
+                    os.system('echo "from actions import play_playlist\nfrom actions import play_songs\nfrom actions import play_album\nfrom actions import play_artist\n\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
+                    if 'all the songs'.lower() in str(usrcmd).lower():
+                        os.system('echo "play_songs()\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
+                        say("Playing all your songs")
+                        play_songs()
+
+                    if 'playlist'.lower() in str(usrcmd).lower():
+                        if 'first'.lower() in str(usrcmd).lower() or 'one'.lower() in str(usrcmd).lower()  or '1'.lower() in str(usrcmd).lower():
+                            os.system('echo "play_playlist(0)\n" >> {}/src/trackchange.py'.format(ROOT_PATH))
+                            say("Playing songs from your playlist")
+                            play_playlist(0)
+                        else:
+                            say("Sorry I am unable to help")
+
+                    if 'album'.lower() in str(usrcmd).lower():
+                        if os.path.isfile(os.path.expanduser("~/.gmusicalbumplayer.json")):
+                            os.system("rm {}".format(os.path.expanduser('~/.gmusicalbumplayer.json')))
+
+                        req=str(usrcmd).lower()
+                        idx=(req).find('album')
+                        album=req[idx:]
+                        album=album.replace("'}", "",1)
+                        album = album.replace('album','',1)
+                        if 'from'.lower() in req:
+                            album = album.replace('from','',1)
+                            album = album.replace('google music','',1)
+                        else:
+                            album = album.replace('google music','',1)
+
+                        album=album.strip()
+                        print(album)
+                        albumstr=('"'+album+'"')
+                        f = open('{}/src/trackchange.py'.format(ROOT_PATH), 'a+')
+                        f.write('play_album('+albumstr+')')
+                        f.close()
+                        say("Looking for songs from the album")
+                        play_album(album)
+
+                    if 'artist'.lower() in str(usrcmd).lower():
+                        if os.path.isfile(os.path.expanduser("~/.gmusicartistplayer.json")):
+                            os.system("rm {}".format(os.path.expanduser('~/.gmusicartistplayer.json')))
+
+                        req=str(usrcmd).lower()
+                        idx=(req).find('artist')
+                        artist=req[idx:]
+                        artist=artist.replace("'}", "",1)
+                        artist = artist.replace('artist','',1)
+                        if 'from'.lower() in req:
+                            artist = artist.replace('from','',1)
+                            artist = artist.replace('google music','',1)
+                        else:
+                            artist = artist.replace('google music','',1)
+
+                        artist=artist.strip()
+                        print(artist)
+                        artiststr=('"'+artist+'"')
+                        f = open('{}/src/trackchange.py'.format(ROOT_PATH), 'a+')
+                        f.write('play_artist('+artiststr+')')
+                        f.close()
+                        say("Looking for songs rendered by the artist")
+                        play_artist(artist)
 
 if __name__ == '__main__':
     try:
