@@ -37,7 +37,7 @@ logged_in = api.login(cfg.google_user, cfg.google_psw, Mobileclient.FROM_MAC_ADD
 
 
 #YouTube API Constants
-DEVELOPER_KEY = cfg.google_developer_api_key
+DEVELOPER_KEY = google_cloud_api_key
 YOUTUBE_API_SERVICE_NAME = 'youtube'
 YOUTUBE_API_VERSION = 'v3'
 
