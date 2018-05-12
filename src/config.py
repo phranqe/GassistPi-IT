@@ -6,6 +6,7 @@ api = {'subscribe_key': '',
 ip = '192.168.1.7'
 
 google_cloud_api_key= ''
+google_developer_api_key= ''
 
 google_user = ''
 google_psw = ''
