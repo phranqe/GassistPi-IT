@@ -35,6 +35,7 @@ api = Mobileclient()
 #If you are using two-step authentication, use app specific password. For guidelines, go through README
 logged_in = api.login(cfg.google_user, cfg.google_psw, Mobileclient.FROM_MAC_ADDRESS)
 
+
 #YouTube API Constants
 DEVELOPER_KEY = google_cloud_api_key
 YOUTUBE_API_SERVICE_NAME = 'youtube'
@@ -167,9 +168,9 @@ def mpvvolmgr():
 #Text to speech converter with translation
 def say(words):
     #words= translator.translate(words, dest=language)
-    words=words.text
-    words=words.replace("Text, ",'',1)
-    words=words.strip()
+    #words=words.text
+    #words=words.replace("Text, ",'',1)
+    #words=words.strip()
     print(words)
     tts = gTTS(text=words, lang=language)
     tts.save(ttsfilename)
@@ -1103,18 +1104,18 @@ def play_artist(artistname):
 
 def gmusicselect(phrase):
     os.system('echo "from actions import play_playlist\nfrom actions import play_songs\nfrom actions import play_album\nfrom actions import play_artist\n\n" >> /home/pi/GassistPi/src/trackchange.py')
-    if 'all the songs'.lower() in phrase:
+    if 'tutti i brani'.lower() in phrase:
         os.system('echo "play_songs()\n" >> /home/pi/GassistPi/src/trackchange.py')
-        say("Playing all your songs")
+        say("Riproduco tutti i brani su Google Music")
         play_songs()
 
     if 'playlist'.lower() in phrase:
-        if 'first'.lower() in phrase or 'one'.lower() in phrase  or '1'.lower() in phrase:
+        if 'prima'.lower() in phrase or 'uno'.lower() in phrase  or '1'.lower() in phrase:
             os.system('echo "play_playlist(0)\n" >> /home/pi/GassistPi/src/trackchange.py')
-            say("Playing songs from your playlist")
+            say("Riproduco la playlist su Google Music")
             play_playlist(0)
         else:
-            say("Sorry I am unable to help")
+             say("Nessun contenuto multimediale trovato")
 
     if 'album'.lower() in phrase:
         if os.path.isfile("/home/pi/.gmusicalbumplayer.json"):
@@ -1504,7 +1505,7 @@ def hue_control(phrase,lightindex,lightaddress):
                 bright=re.findall('\d+', phrase)
             brightval= (bright/100)*255
             huereq=requests.head("http://"+lightaddress+"/set?light="+lightindex+"&on=true&bri="+str(brightval))
-            say("Changing "+huelightname+" brightness to "+bright+" percent")
+            say("Changing "+huelightname+" brightness to "+bright+" percent")            
     except (requests.exceptions.ConnectionError,TypeError) as errors:
         if str(errors)=="'NoneType' object is not iterable":
             print("Type Error")
@@ -1517,8 +1518,8 @@ def hue_control(phrase,lightindex,lightaddress):
 
 #GPIO Device Control
 def Action(phrase):
-    if 'shut down' in phrase:
-        say('Shutting down Raspberry Pi')
+    if 'spegni' in phrase:
+        say('Spegnimento del Raspberry Pi')
         time.sleep(10)
         os.system("sudo shutdown -h now")
         #subprocess.call(["shutdown -h now"], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
