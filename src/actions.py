@@ -1226,18 +1226,18 @@ def youtubeplayer():
 
 def YouTube_Autoplay(phrase):
     urllist=[]
-    idx=phrase.find('stream')
+    idx=phrase.find('avvia')
     track=phrase[idx:]
     track=track.replace("'}", "",1)
-    track = track.replace('stream','',1)
+    track = track.replace('avvia','',1)
     track=track.strip()
-    say("Getting autoplay links")
+    say("Riproduco da Youtube")
     fullurl,urlid=youtube_search(track)
     autourls=fetchautoplaylist(fullurl,10)#Maximum of 10 URLS
     print(autourls)
     for i in range(0,len(autourls)):
         urllist.append(autourls[i])
-    say("Adding autoplay links to the playlist")
+    say("Riproduco playlist da Youtube")
     with open('/home/pi/youtubeurllist.json', 'w') as output_file:
         json.dump(autourls, output_file)
     if os.path.isfile("/home/pi/.youtubeplayer.json"):
@@ -1247,12 +1247,12 @@ def YouTube_Autoplay(phrase):
 
 def YouTube_No_Autoplay(phrase):
     urllist=[]
-    idx=phrase.find('stream')
+    idx=phrase.find('avvia')
     track=phrase[idx:]
     track=track.replace("'}", "",1)
-    track = track.replace('stream','',1)
+    track = track.replace('avvia','',1)
     track=track.strip()
-    say("Getting youtube link")
+    say("Riproduco da Youtube")
     fullurl,urlid=youtube_search(track)
     urllist.append(fullurl)
     print(urllist)
