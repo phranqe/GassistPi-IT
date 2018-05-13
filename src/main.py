@@ -399,7 +399,7 @@ def main():
             if 'trigger'.lower() in str(usrcmd).lower():
                 assistant.stop_conversation()
                 Action(str(usrcmd).lower())
-            if 'stream'.lower() in str(usrcmd).lower():
+            if 'avvia'.lower() in str(usrcmd).lower():
                 assistant.stop_conversation()
                 os.system('pkill mpv')
                 if os.path.isfile("/home/pi/GassistPi-IT/src/trackchange.py"):
