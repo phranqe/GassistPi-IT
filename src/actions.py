@@ -94,7 +94,7 @@ clrlist=[]
 clrlistfullname=[]
 clrrgblist=[]
 clrhexlist=[]
-with open('/home/pi/GassistPi/src/colours.json', 'r') as col:
+with open('/home/pi/GassistPi-IT/src/colours.json', 'r') as col:
      colours = json.load(col)
 for i in range(0,len(colours)):
     clrname=colours[i]["name"]
@@ -1103,15 +1103,15 @@ def play_artist(artistname):
         say("Nessun contenuto multimediale trovato")
 
 def gmusicselect(phrase):
-    os.system('echo "from actions import play_playlist\nfrom actions import play_songs\nfrom actions import play_album\nfrom actions import play_artist\n\n" >> /home/pi/GassistPi/src/trackchange.py')
+    os.system('echo "from actions import play_playlist\nfrom actions import play_songs\nfrom actions import play_album\nfrom actions import play_artist\n\n" >> /home/pi/GassistPi-IT/src/trackchange.py')
     if 'tutti i brani'.lower() in phrase:
-        os.system('echo "play_songs()\n" >> /home/pi/GassistPi/src/trackchange.py')
+        os.system('echo "play_songs()\n" >> /home/pi/GassistPi-IT/src/trackchange.py')
         say("Riproduco tutti i brani su Google Music")
         play_songs()
 
     if 'playlist'.lower() in phrase:
         if 'prima'.lower() in phrase or 'uno'.lower() in phrase  or '1'.lower() in phrase:
-            os.system('echo "play_playlist(0)\n" >> /home/pi/GassistPi/src/trackchange.py')
+            os.system('echo "play_playlist(0)\n" >> /home/pi/GassistPi-IT/src/trackchange.py')
             say("Riproduco la playlist su Google Music")
             play_playlist(0)
         else:
