@@ -1,6 +1,6 @@
 
 
-# GassistPi_IT -- Google Assistant for all Raspberry Pi Boards - VERSIONE ITALIANA
+# GassistPi-IT -- Google Assistant for all Raspberry Pi Boards - VERSIONE ITALIANA
 *******************************************************************************************************************************
 
 # Features (All features are applicable to all Pi boards, unless and otherwise mentioned):  
