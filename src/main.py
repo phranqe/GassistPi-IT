@@ -360,6 +360,16 @@ def main():
                     assistant.stop_conversation()
                     tasmota_control(str(usrcmd).lower(), name.lower(),tasmota_deviceip[num])
                     break
+            if 'lampadina'.lower() in str(usrcmd).lower():		
+                assistant.stop_conversation()
+                if 'accendi'.lower() in str(usrcmd).lower():
+                    url = ''
+                    r = requests.post(url, data="")
+                    say("Lampadina Accesa")
+                elif 'spegni'.lower() in str(usrcmd).lower():
+                    url = ''
+                    r = requests.post(url, data="")
+                    say("Lampadina Spenta")        
             if 'magic mirror'.lower() in str(usrcmd).lower():
                 assistant.stop_conversation()
                 try:
